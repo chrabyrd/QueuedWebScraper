@@ -1,18 +1,25 @@
 require 'sinatra'
 require 'sinatra/namespace'
+require 'open-uri'
 require 'mongoid'
 
 Mongoid.load! 'mongoid.config'
 
 QUEUE = []
-val = 0
 
 Thread.new do
   while true do
     sleep 1
     next if QUEUE.empty?
-    QUEUE.shift
+    scrape_html(QUEUE.shift)
   end
+end
+
+def scrape_html(id)
+  web_data = WebData.where(id: id).first
+  scraped_html = open(web_data.url).read.encode('UTF-8') # UTF-8 Keeps MongoDB happy
+
+  web_data.update_attribute(:html, scraped_html)
 end
 
 # Model
@@ -43,16 +50,18 @@ namespace '/api' do
   end
 
   get '/:id' do |id| # Show
-    data_object = WebData.where(id: id).first
-    halt(404, { message:'Object Not Found'}.to_json) unless data_object
-    data_object.to_json
+    web_data = WebData.where(id: id).first
+    halt(404, { message:'Object Not Found'}.to_json) unless web_data
+    web_data.to_json
   end
 
   post '/' do # Create
-    data_object = WebData.new(JSON.parse(request.body.read))
-    id = data_object._id.to_s
+    web_data = WebData.new(JSON.parse(request.body.read))
+    id = web_data._id.to_s
 
-    if data_object.save
+    if web_data.save
+      QUEUE << web_data.id
+
       response.headers['Location'] = "#{base_url}/api/#{id}"
       status 201
     else
@@ -62,7 +71,5 @@ namespace '/api' do
 end
 
 get '/' do
-  val += 1
-  QUEUE << val
   "Hello World! #{QUEUE}"
 end
