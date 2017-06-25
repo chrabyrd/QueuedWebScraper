@@ -7,20 +7,29 @@ Mongoid.load! 'mongoid.config'
 
 QUEUE = []
 
-Thread.new do
-  while true do
-    sleep 1
-    next if QUEUE.empty?
-    scrape_html(QUEUE.shift)
+# Worker
+
+class Worker
+  def work
+    Thread.new do
+      while true do
+        sleep 1
+        next if QUEUE.empty?
+        scrape_html(QUEUE.shift)
+      end
+    end
+  end
+
+  def scrape_html(id)
+    web_data = WebData.where(id: id).first
+    scraped_html = open(web_data.url).read.encode('UTF-8') # UTF-8 Keeps MongoDB happy
+
+    web_data.update_attribute(:html, scraped_html)
   end
 end
 
-def scrape_html(id)
-  web_data = WebData.where(id: id).first
-  scraped_html = open(web_data.url).read.encode('UTF-8') # UTF-8 Keeps MongoDB happy
-
-  web_data.update_attribute(:html, scraped_html)
-end
+worker = Worker.new
+worker.work
 
 # Model
 
@@ -71,5 +80,5 @@ namespace '/api' do
 end
 
 get '/' do
-  "Hello World! #{QUEUE}"
+  "Try submitting a POST request to /api/ with a url. There's also /api/index."
 end
