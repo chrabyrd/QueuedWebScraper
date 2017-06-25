@@ -21,7 +21,7 @@ class WebData
   include Mongoid::Document
 
   field :url, type: String
-  field :html, type: String, default: "202 pending"
+  field :html, type: String, default: "pending"
   validates :url, presence: true
 end
 
@@ -32,6 +32,12 @@ namespace '/api' do
     content_type 'application/json'
   end
 
+  helpers do
+    def base_url
+      @base_url ||= "#{request.env['rack.url_scheme']}://#{request.env['HTTP_HOST']}"
+    end
+  end
+
   get '/index' do # Index
     WebData.all.to_json
   end
@@ -40,6 +46,18 @@ namespace '/api' do
     data_object = WebData.where(id: id).first
     halt(404, { message:'Object Not Found'}.to_json) unless data_object
     data_object.to_json
+  end
+
+  post '/' do # Create
+    data_object = WebData.new(JSON.parse(request.body.read))
+    id = data_object._id.to_s
+
+    if data_object.save
+      response.headers['Location'] = "#{base_url}/api/#{id}"
+      status 201
+    else
+      status 422
+    end
   end
 end
 
