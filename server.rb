@@ -5,18 +5,35 @@ require 'mongoid'
 
 Mongoid.load! 'mongoid.config'
 
-QUEUE = []
+# Factory and Worker
 
-# Worker
+class Factory
+  attr_accessor :queue
+
+  def initialize
+    @queue = []
+  end
+
+  def create_worker
+    worker = Worker.new
+    worker.work(@queue.shift)
+  end
+
+  def go
+    Thread.new do
+      while true
+        next if @queue.empty?
+        create_worker
+        sleep 1
+      end
+    end
+  end
+end
 
 class Worker
-  def work
+  def work(web_id)
     Thread.new do
-      while true do
-        sleep 1
-        next if QUEUE.empty?
-        scrape_html(QUEUE.shift)
-      end
+      scrape_html(web_id)
     end
   end
 
@@ -28,8 +45,8 @@ class Worker
   end
 end
 
-worker = Worker.new
-worker.work
+factory = Factory.new
+factory.go
 
 # Model
 
@@ -69,7 +86,7 @@ namespace '/api' do
     id = web_data._id.to_s
 
     if web_data.save
-      QUEUE << web_data.id
+      factory.queue << web_data.id
 
       response.headers['Location'] = "#{base_url}/api/#{id}"
       status 201
